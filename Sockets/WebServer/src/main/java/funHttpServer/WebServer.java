@@ -17,6 +17,7 @@ write a response back
 package funHttpServer;
 
 import java.io.*;
+import org.json.*;
 import java.net.*;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -61,7 +62,8 @@ class WebServer {
         try {
           server.close();
         } catch (IOException e) {
-          // TODO Auto-generated catch block
+	  System.out.println("exception: " + e.getMessage());
+	  System.out.println("Server failed to close socket: " + sock);
           e.printStackTrace();
         }
       }
@@ -196,31 +198,43 @@ class WebServer {
         } else if (request.contains("multiply?")) {
           // This multiplies two numbers, there is NO error handling, so when
           // wrong data is given this just crashes
+	  if (!request.contains("num1") || !request.contains("num2")) {
+		  // Bad Request: Missing arguement misinput
+	  	builder.append("HTTP/1.1 400 Bad Request\n");
+		builder.append("Content-type: text/html; charset=utf-8\n");
+		builder.append("\n");
+		builder.append("multiply request requires two arguements named 'num1' and 'num2'");
+	  } else {
+		
+          	Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+          	// extract path parameters
+          	query_pairs = splitQuery(request.replace("multiply?", ""));
+		
+		try {
 
-          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          // extract path parameters
-          query_pairs = splitQuery(request.replace("multiply?", ""));
+          		// extract required fields from parameters
+          		Integer num1 = Integer.parseInt(query_pairs.get("num1"));
+          		Integer num2 = Integer.parseInt(query_pairs.get("num2"));
 
-          // extract required fields from parameters
-          Integer num1 = Integer.parseInt(query_pairs.get("num1"));
-          Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+          		// do math
+          		Integer result = num1 * num2;
 
-          // do math
-          Integer result = num1 * num2;
-
-          // Generate response
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Result is: " + result);
-
-          // TODO: Include error handling here with a correct error code and
-          // a response that makes sense
-
+          		// Generate response
+          		builder.append("HTTP/1.1 200 OK\n");
+          		builder.append("Content-Type: text/html; charset=utf-8\n");
+          		builder.append("\n");
+          		builder.append("Result is: " + result);
+		} catch (NumberFormatException e) {
+			builder.append("HTTP/1.1 415 Unsupported Media Type\n");
+			builder.append("Content-Type: text/html; charset=utf-8\n");
+			builder.append("\n");
+			builder.append("multiply request requires integers for arguements.\n");
+			builder.append("Error: " + e);
+		}
+	  }
         } else if (request.contains("github?")) {
           // pulls the query from the request and runs it with GitHub's REST API
           // check out https://docs.github.com/rest/reference/
-          //
           // HINT: REST is organized by nesting topics. Figure out the biggest one first,
           //     then drill down to what you care about
           // "Owner's repo is named RepoName. Example: find RepoName's contributors" translates to
@@ -228,17 +242,109 @@ class WebServer {
 
           Map<String, String> query_pairs = new LinkedHashMap<String, String>();
           query_pairs = splitQuery(request.replace("github?", ""));
-          String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
-          System.out.println(json);
 
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Check the todos mentioned in the Java source file");
-          // TODO: Parse the JSON returned by your fetch and create an appropriate
-          // response based on what the assignment document asks for
+	  if (query_pairs.get("query").matches("users/[A-Za-z0-9]+/repos")) {
 
-        } else {
+	  	String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
+	
+	  	JSONArray repoArray = new JSONArray(json);
+	
+	  	builder.append("HTTP/1.1 200 OK\n");
+	  	builder.append("Content-Type: text/html; charset=utf-8\n");
+	  	builder.append("\n");
+	  	for (int i = 0; i < repoArray.length(); i++) {
+			JSONObject repo = repoArray.getJSONObject(i);
+
+			String repoName = repo.getString("name");
+			int repoID = repo.getInt("id");
+			JSONObject repoOwner = repo.getJSONObject("owner");
+			String repoLogin = repoOwner.getString("login");
+		
+			builder.append("fullname: " + repoName + "<br>");
+			builder.append("id: " + repoID + "<br>");
+			builder.append("loginname: " + repoLogin + "<br><br>");
+	  	}
+	  } else {
+		builder.append("HTTP/1.1 400 Bad Request\n");
+		builder.append("Content-Type: text/html; charset=utf-8\n");
+		builder.append("\n");
+		builder.append("query needs to be of the form users/{username}/repos");
+	  }
+	} else if (request.contains("jediname?")) {
+		if (!request.contains("firstname") || !request.contains("lastname") || !request.contains("mothers_maiden_name") || !request.contains("birth_city")) {
+			builder.append("HTTP/1.1 400 Bad Request\n");
+			builder.append("Content-Type: text/html; charset=utf-8\n");
+			builder.append("\n");
+			builder.append("jediname request requires 4 arguements 'firstname', 'lastname', 'mothers_maiden_name', and 'birth_city'\n");
+		} else {
+			Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+			query_pairs = splitQuery(request.replace("jediname?", ""));
+			
+			if (!query_pairs.get("firstname").matches("[A-Za-z]+") || !query_pairs.get("lastname").matches("[A-Za-z]+") || !query_pairs.get("mothers_maiden_name").matches("[A-Za-z]+") || !query_pairs.get("birth_city").matches("[A-Za-z]+")) {
+				builder.append("HTTP/1.1 400 Bad Request\n");
+				builder.append("Content-Type: text/html; charset=utf-8\n");
+				builder.append("\n");
+				builder.append("Arguements contained illegal character(s).");
+			} else {
+
+
+			String firstName = query_pairs.get("firstname");
+			String lastName = query_pairs.get("lastname");
+			String mothersMaidenName = query_pairs.get("mothers_maiden_name");
+			String birthCity = query_pairs.get("birth_city");
+
+			StringBuilder jediFirstName = new StringBuilder();
+			jediFirstName.append(lastName.charAt(0));
+			jediFirstName.append(lastName.charAt(1));
+			jediFirstName.append(lastName.charAt(2));
+			jediFirstName.append("-");
+			jediFirstName.append(firstName.charAt(0));
+			jediFirstName.append(firstName.charAt(1));
+
+			StringBuilder jediLastName = new StringBuilder();
+			jediLastName.append(mothersMaidenName.charAt(0));
+			jediLastName.append(mothersMaidenName.charAt(1));
+			jediLastName.append(mothersMaidenName.charAt(2));
+			jediLastName.append(birthCity.charAt(0));
+			jediLastName.append(birthCity.charAt(1));
+			jediLastName.append(birthCity.charAt(2));
+
+			builder.append("HTTP/1.1 200 OK\n");
+			builder.append("Content-Type: text/html; charset=utf-8\n");
+			builder.append("\n");
+			builder.append("Your Jedi Name is <b>" + jediFirstName + " " + jediLastName + "</b>.");
+			}
+		}
+	} else if (request.contains("dog_years?")) {
+		if (!request.contains("human_years")) {
+			builder.append("HTTP/1.1 400 Bad Request\n");
+			builder.append("Content-Type: text/html; charset=utf-8\n");
+			builder.append("\n");
+			builder.append("dog_years request requires 1 arguement 'human_years'");
+		} else {
+			Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+			query_pairs = splitQuery(request.replace("dog_years?", ""));
+
+			if (!query_pairs.get("human_years").matches("[0-9]+")) {
+				builder.append("HTTP/1.1 400 Bad Request\n");
+				builder.append("Content-Type: text/html; charset=utf-8\n");
+				builder.append("\n");
+				builder.append("Please enter a valid integer for argument human_years.");
+			} else {
+				Integer humanYears = Integer.parseInt(query_pairs.get("human_years"));
+				Integer dogYears = 0;
+				if (humanYears > 0) dogYears += 15;
+				if (humanYears > 1) dogYears += 9;
+				if (humanYears > 2) {
+					dogYears += ((humanYears - 2) * 5);
+				}
+				builder.append("HTTP/1.1 200 OK\n");
+				builder.append("Content-Type: text/html; charse=utf-8\n");
+				builder.append("\n");
+				builder.append("Your dog is " + dogYears + " year(s) old.");
+			}
+		}	
+	} else {
           // if the request is not recognized at all
 
           builder.append("HTTP/1.1 400 Bad Request\n");
